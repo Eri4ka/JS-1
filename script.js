@@ -1,4 +1,5 @@
 import { events, orders } from './db.js';
+import { getBarcode } from './helpers.js';
 
 const form = document.querySelector('.form');
 const eventSelect = document.querySelector('#event');
@@ -7,11 +8,14 @@ const user_id = Math.floor(Math.random() * 1000);
 const formButton = document.querySelector('.form__button');
 
 let ordersTotal = 1;
+let ticketId = 1;
+let tickets = {};
 let order = {
     equal_price: [],
 };
 
-const getEvents = () => {
+// Загружает ивенты на страницу
+const getEventsToForm = () => {
     events.forEach(item => {
         const option = document.createElement('option');
         option.setAttribute('value', item.id);
@@ -19,30 +23,31 @@ const getEvents = () => {
         eventSelect.append(option);
     });
     formButton.disabled = true;
+
+    eventSelect.addEventListener('change', () => {
+        const value = eventSelect.value;
+        formTicket.innerHTML = '';
+        if (value) {
+            formButton.disabled = false;
+            order = {
+                equal_price: [],
+            };
+            events.forEach(item => {
+                if (item.id === value) {
+                    item.ticketTypes.forEach((item, i) => {
+                        addTicketsToForm(item, i);
+                        order[`ticket_${item.type}_quantity`] = 0;
+                    });
+                }
+            });
+        } else {
+            formButton.disabled = true;
+        }
+    });
 };
 
-eventSelect.addEventListener('change', () => {
-    const value = eventSelect.value;
-    formTicket.innerHTML = '';
-    if (value) {
-        formButton.disabled = false;
-        order = {
-            equal_price: [],
-        };
-        events.forEach(item => {
-            if (item.id === value) {
-                item.ticketTypes.forEach((item, i) => {
-                    addTickets(item, i);
-                    order[`ticket_${item.type}_quantity`] = 0;
-                });
-            }
-        });
-    } else {
-        formButton.disabled = true;
-    }
-});
-
-const addTickets = (item, i) => {
+// Загружает билеты на страницу
+const addTicketsToForm = (item, i) => {
     const ticket = document.createElement('div');
     ticket.classList.add('form-ticket');
     ticket.innerHTML = `
@@ -57,25 +62,52 @@ const addTickets = (item, i) => {
     `;
     formTicket.append(ticket);
 
-    const pushTickets = () => {
-        order[`ticket_${item.type}_price`] = item.price;
-        const adultCount = document.querySelector(`#count-${item.type}`);
-        if (adultCount) {
-            adultCount.addEventListener('change', () => {
-                order[`ticket_${item.type}_quantity`] = +adultCount.value;
-                order.equal_price[i] = adultCount.value * item.price;
-            });
-        }
-    };
-    pushTickets();
-    
+    pushTickets(item, i);
 };
 
-getEvents();
+// Добавляет выбранные билеты в заказ
+const pushTickets = (ticket, currentTicket) => {
+    order[`ticket_${ticket.type}_price`] = ticket.price;
+    const adultCount = document.querySelector(`#count-${ticket.type}`);
+    if (adultCount) {
+        adultCount.addEventListener('change', () => {
+            order[`ticket_${ticket.type}_quantity`] = +adultCount.value;
+            order.equal_price[currentTicket] = adultCount.value * ticket.price;
+
+            // Добавляет общее выбранное количество по каждому типу билетов
+            const addTicketsCount = () => tickets[`ticket_${ticket.type}_quantity`] = +adultCount.value;
+
+            if (Object.keys(tickets).length === 0) {
+                addTicketsCount();
+            }
+            if (Object.keys(tickets)[currentTicket] === `ticket_${ticket.type}_quantity`) {
+                addTicketsCount();
+            } else {
+                addTicketsCount();
+            }
+        });
+    }
+};
+
+getEventsToForm();
+
+// Создает билеты к заказу
+const createTickets = () => {
+    const ticketsCount = Object.values(tickets).reduce((acc, i) => acc + i, 0);
+    const arrayOfTickets = [];
+    for (let i = 0; i < ticketsCount; i++) {
+        arrayOfTickets.push({id: ticketId, barcode: getBarcode()});
+        ticketId++;
+    }
+    
+    return arrayOfTickets;
+};
 
 form.addEventListener('submit', (e) => {
     e.preventDefault();
+    
     const equal_price = order.equal_price.reduce((acc, i) => acc + i, 0);
+
     if (equal_price === 0) {
         alert('Выберите билеты');
     } else {
@@ -85,9 +117,10 @@ form.addEventListener('submit', (e) => {
             event_date: events.filter(item => item.id === eventSelect.value)[0].eventDate,
             event_id: eventSelect.value,
             created: new Date().toLocaleString().replace(/\./gi, '-').replace(/\,/gi, ''),
-            barcode: Math.floor(Math.random() * (3000000-2000000) + 2000000),
+            barcode: getBarcode(),
             user_id,
             equal_price,
+            tickets: createTickets(),
         };
         ordersTotal++;
         orders.push(currentOrder);

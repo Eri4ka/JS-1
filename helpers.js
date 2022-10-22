@@ -1,0 +1,1 @@
+export const getBarcode = () => Math.floor(Math.random() * (3000000-2000000) + 2000000);
